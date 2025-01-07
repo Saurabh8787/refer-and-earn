@@ -1,147 +1,147 @@
-import bcrypt from "bcryptjs"; // Import bcryptjs for password hashing and comparison
-import jwt from "jsonwebtoken"; // Import jsonwebtoken for generating JWT tokens
-import { v4 as uuidv4 } from "uuid"; // Import uuid for generating unique referral codes
-import User from "../models/User.js"; // Import User model
+import bcrypt from "bcryptjs"; 
+import jwt from "jsonwebtoken"; 
+import { v4 as uuidv4 } from "uuid"; 
+import User from "../models/User.js"; 
 
-// Function to generate a referral code
+
 const generateReferralCode = () => {
-  return uuidv4().substring(0, 8).toUpperCase(); // Generate a UUID, take the first 8 characters, and convert to uppercase
+  return uuidv4().substring(0, 8).toUpperCase(); 
 };
 
-// Signup function to register a new user
+
 const signup = async (req, res) => {
   try {
-    const { username, password, referralCode } = req.body; // Extract username, password, and referralCode from request body
+    const { username, password, referralCode } = req.body; 
 
-    const existingUser = await User.findOne({ username }); // Check if a user with the same username already exists
+    const existingUser = await User.findOne({ username }); 
     if (existingUser)
-      return res.status(400).json({ message: "Username already exists." }); // If user exists, return error
+      return res.status(400).json({ message: "Username already exists." }); 
 
-    let referredBy = null; // Initialize referredBy as null
+    let referredBy = null; 
 
     if (referralCode) {
-      referredBy = await User.findOne({ referralCode }); // Find the user who referred by referralCode
+      referredBy = await User.findOne({ referralCode }); 
       if (!referredBy)
-        return res.status(400).json({ message: "Invalid referral code." }); // If referral code is invalid, return error
+        return res.status(400).json({ message: "Invalid referral code." }); 
       if (referredBy.referrals.length >= 8)
-        return res.status(400).json({ message: "Referral limit reached." }); // If referral limit is reached, return error
+        return res.status(400).json({ message: "Referral limit reached." }); 
     }
 
     let user = new User({
       username,
       password,
-      referralCode: generateReferralCode(), // Generate a new referral code for the user
-      referredBy: referredBy ? referredBy._id : null, // Set referredBy to the referring user's ID if exists
+      referralCode: generateReferralCode(), 
+      referredBy: referredBy ? referredBy._id : null, 
     });
 
-    if (referredBy) referredBy.referrals.push(user._id); // Add the new user's ID to the referring user's referrals
+    if (referredBy) referredBy.referrals.push(user._id); 
 
-    await user.save(); // Save the new user to the database
-    if (referredBy) await referredBy.save(); // Save the referring user to the database if exists
+    await user.save(); 
+    if (referredBy) await referredBy.save(); 
 
-    res.status(200).json({ message: "User registered successfully." }); // Return success message
+    res.status(200).json({ message: "User registered successfully." }); 
   } catch (error) {
-    res.status(500).json({ message: "Server error." }); // Return server error
+    res.status(500).json({ message: "Server error." }); 
   }
 };
 
-// Login function to authenticate a user
+
 const login = async (req, res) => {
   try {
-    const { username, password } = req.body; // Extract username and password from request body
-    const user = await User.findOne({ username }).select("+password"); // Find the user by username and include password in the result
+    const { username, password } = req.body; 
+    const user = await User.findOne({ username }).select("+password"); 
     if (!user)
-      return res.status(400).json({ message: "Invalid username or password." }); // If user not found, return error
+      return res.status(400).json({ message: "Invalid username or password." }); 
 
-    const validPassword = await bcrypt.compare(password, user.password); // Compare the provided password with the stored hashed password
+    const validPassword = await bcrypt.compare(password, user.password); 
     if (!validPassword)
-      return res.status(400).json({ message: "Invalid username or password." }); // If password is invalid, return error
+      return res.status(400).json({ message: "Invalid username or password." }); 
 
-    const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET_KEY); // Generate a JWT token with the user's ID
+    const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET_KEY); 
     res
-      .cookie("token", token, { httpOnly: true }) // Set the token as an HTTP-only cookie
+      .cookie("token", token, { httpOnly: true }) 
       .status(200)
-      .json({ message: "Logged in successfully." }); // Return success message
+      .json({ message: "Logged in successfully." }); 
   } catch (error) {
-    res.status(500).json({ message: "Server error." }); // Return server error
+    res.status(500).json({ message: "Server error." }); 
   }
 };
 
-// Logout function
+
 const logout = (req, res) => {
-  res.clearCookie("token"); // Clear the token cookie
-  res.status(200).json({ message: "Logged out successfully." }); // Return success message
+  res.clearCookie("token"); 
+  res.status(200).json({ message: "Logged out successfully." }); 
 };
-// Function to get user details
+
 const getUserDetails = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).populate(
       "referredBy referrals"
-    ); // Find the user by ID and populate referredBy and referrals fields
+    ); 
     res.status(200).json({
-      referralCode: user.referralCode, // Return user's referral code
-      directEarnings: user.directEarnings, // Return user's direct earnings
-      indirectEarnings: user.indirectEarnings, // Return user's indirect earnings
-      referredBy: user.referredBy, // Return the user who referred this user
-      referrals: user.referrals, // Return the users referred by this user
+      referralCode: user.referralCode, 
+      directEarnings: user.directEarnings, 
+      indirectEarnings: user.indirectEarnings, 
+      referredBy: user.referredBy, 
+      referrals: user.referrals,
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error." }); // Return server error
+    res.status(500).json({ message: "Server error." }); 
   }
 };
 
-// Function to get parent and grandparent details
+
 const getParent = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).populate("referredBy"); // Find the user by ID and populate referredBy field
+    const user = await User.findById(req.user._id).populate("referredBy"); 
     if (!user.referredBy)
-      return res.status(404).json({ message: "No parent referral found." }); // If no parent referral found, return error
+      return res.status(404).json({ message: "No parent referral found." }); 
 
-    const parent = user.referredBy; // Get the parent user
+    const parent = user.referredBy; 
     const grandparent = parent.referredBy
       ? await User.findById(parent.referredBy)
-      : null; // Get the grandparent user if exists
+      : null; 
 
     res.status(200).json({
       parent: {
-        username: parent.username, // Return parent's username
-        referralCode: parent.referralCode, // Return parent's referral code
+        username: parent.username, 
+        referralCode: parent.referralCode, 
       },
       grandparent: grandparent
         ? {
-            username: grandparent.username, // Return grandparent's username if exists
-            referralCode: grandparent.referralCode, // Return grandparent's referral code if exists
+            username: grandparent.username, 
+            referralCode: grandparent.referralCode, 
           }
-        : null, // If no grandparent, return null
+        : null, 
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error." }); // Return server error
+    res.status(500).json({ message: "Server error." }); 
   }
 };
 
-// Function to get children and grandchildren details
+
 const getChildren = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).populate("referrals"); // Find the user by ID and populate referrals field
-    const children = user.referrals; // Get the children users
+    const user = await User.findById(req.user._id).populate("referrals"); 
+    const children = user.referrals; 
 
     const grandchildren = await User.find({
       referredBy: { $in: children.map((child) => child._id) },
-    }); // Find the grandchildren users
+    }); 
 
     res.status(200).json({
       children: children.map((child) => ({
-        username: child.username, // Return children's usernames
-        referralCode: child.referralCode, // Return children's referral codes
+        username: child.username, 
+        referralCode: child.referralCode,
       })),
       grandchildren: grandchildren.map((grandchild) => ({
-        username: grandchild.username, // Return grandchildren's usernames
-        referralCode: grandchild.referralCode, // Return grandchildren's referral codes
+        username: grandchild.username, 
+        referralCode: grandchild.referralCode, 
       })),
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error." }); // Return server error
+    res.status(500).json({ message: "Server error." }); 
   }
 };
 
-export { signup, login, getUserDetails, getParent, getChildren, logout }; // Export the functions
+export { signup, login, getUserDetails, getParent, getChildren, logout }; 
