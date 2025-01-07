@@ -79,6 +79,7 @@ const getUserDetails = async (req, res) => {
       "referredBy referrals"
     ); 
     res.status(200).json({
+      username: user.username,
       referralCode: user.referralCode, 
       directEarnings: user.directEarnings, 
       indirectEarnings: user.indirectEarnings, 
